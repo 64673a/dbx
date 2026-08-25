@@ -27,12 +27,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
       - name: Commit refreshed snapshot
+        env:
+          # GITHUB_TOKEN cannot bypass the main-branch "PRs only" ruleset; push
+          # as the repo admin PAT instead (same pattern as mcp-release.yml).
+          RELEASE_TOKEN: ${{ secrets.MCP_RELEASE_TOKEN }}
         run: |
           if git diff --quiet -- docs/data/contributors.json; then
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -n "${RELEASE_TOKEN}" ]; then
+            git remote set-url origin "https://x-access-token:${RELEASE_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          fi
           git add docs/data/contributors.json
           git commit -m "chore(docs): refresh contributor activity"
           git push

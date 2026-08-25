@@ -31,6 +31,10 @@ jobs:
 
       - name: Update hash when needed
         shell: bash
+        env:
+          # GITHUB_TOKEN cannot bypass the main-branch "PRs only" ruleset; push
+          # as the repo admin PAT instead (same pattern as mcp-release.yml).
+          RELEASE_TOKEN: ${{ secrets.MCP_RELEASE_TOKEN }}
         run: |
           set -euo pipefail
 
@@ -59,6 +63,9 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -n "${RELEASE_TOKEN}" ]; then
+            git remote set-url origin "https://x-access-token:${RELEASE_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          fi
           git add flake.nix
           git commit -m "fix(nix): update pnpm dependency hash"
           # Push only the checked commit to the triggering branch; a concurrent update must fail safely.
