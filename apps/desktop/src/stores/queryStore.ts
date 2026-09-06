@@ -2786,6 +2786,29 @@ export const useQueryStore = defineStore("query", () => {
     return registerOpenTab(tab);
   }
 
+  function openXuguDashboard(connectionId: string) {
+    const existing = tabs.value.find((tab) => tab.mode === "xugu-dashboard" && tab.connectionId === connectionId);
+    if (existing) {
+      switchTab(existing.id);
+      return existing.id;
+    }
+
+    const conn = useConnectionStore().getConfig(connectionId);
+    const id = uuid();
+    const tab: QueryTab = {
+      id,
+      title: conn?.name ? `${conn.name} - ${t("xuguServerDashboard.title")}` : t("xuguServerDashboard.title"),
+      connectionId,
+      database: conn?.database || "",
+      sql: "",
+      isExecuting: false,
+      isCancelling: false,
+      isExplaining: false,
+      mode: "xugu-dashboard",
+    };
+    return registerOpenTab(tab);
+  }
+
   function openNacosDashboard(connectionId: string) {
     const existing = tabs.value.find((tab) => tab.mode === "nacos-dashboard" && tab.connectionId === connectionId);
     if (existing) {
@@ -7731,6 +7754,7 @@ export const useQueryStore = defineStore("query", () => {
     openSqlServerActivityTrace,
     openMysqlDashboard,
     openPostgresDashboard,
+    openXuguDashboard,
     openNacosDashboard,
     openDamengUsers,
     openDamengRoles,
