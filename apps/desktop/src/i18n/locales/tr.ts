@@ -2196,6 +2196,7 @@ export default withEnglishFallback({
     queryError: "Sorgu Hatası",
     saveErrorTitle: "Değişiklikler Kaydedilemedi",
     dataUnavailable: "Tablo verisinin yeniden yüklenmesi gerekiyor.",
+    viewSnapshotSelectionNotRestored: "Önceki görünüm geri yüklendi, ancak seçim korunamayacak kadar büyüktü.",
     cachedResultUnavailable: "Önbelleğe alınmış sonuç eksik veya uyumsuz.",
     reexecuteQuery: "Sorguyu yeniden çalıştır",
     dataUnavailableHintPrefix: "Yeniden yüklemek için ",

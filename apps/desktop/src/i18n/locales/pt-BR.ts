@@ -2051,6 +2051,7 @@ export default withEnglishFallback({
     queryError: "Erro na Consulta",
     saveErrorTitle: "Falha ao salvar alterações",
     dataUnavailable: "Os dados da tabela precisam ser recarregados.",
+    viewSnapshotSelectionNotRestored: "A visualização anterior foi restaurada, mas a seleção era grande demais para ser mantida.",
     dataUnavailableHintPrefix: "Pressione ",
     dataUnavailableHintSuffix: " ou clique em Atualizar abaixo para recarregar.",
     refresh: "Atualizar",
