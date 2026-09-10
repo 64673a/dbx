@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useUpdateBlocker } from "@/lib/app/updatePreparation";
 import { computed, nextTick, onMounted, onUnmounted, onActivated, onDeactivated, ref, shallowRef, toRaw, useSlots, watch, defineAsyncComponent, type Component, type CSSProperties } from "vue";
 import { useI18n } from "vue-i18n";
 import {
@@ -11365,6 +11366,7 @@ function openGridSnapshot() {
   };
   gridSnapshotOpen.value = true;
 }
+useUpdateBlocker(() => (hasPendingChanges.value || hasPendingDataEditorDraft.value || isSaving.value ? t("updates.preparationDrafts") : undefined));
 </script>
 
 <template>
