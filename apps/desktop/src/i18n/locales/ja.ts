@@ -7095,6 +7095,7 @@ export default withEnglishFallback({
     mcpToolOpenSession: "クエリセッションを開く",
     mcpToolCloseSession: "クエリセッションを閉じる",
     mcpToolExecuteRedisCommand: "Redis コマンドを実行",
+    mcpToolPeekMessages: "Kafka メッセージを読み取る",
     mcpToolSendMessage: "メッセージキューのメッセージを送信",
     mcpToolAddConnection: "接続を追加",
     mcpToolDuplicateConnection: "接続を複製",
