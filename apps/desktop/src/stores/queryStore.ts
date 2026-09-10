@@ -5,6 +5,7 @@ import { uuid } from "@/lib/common/utils";
 import { computed, markRaw, nextTick, onScopeDispose, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import type { BatchSqlExecution, ConnectionConfig, DatabaseType, IndexInfo, NacosConfigEditorViewport, ObjectBrowserFilter, ObjectBrowserViewport, QueryResult, QueryResultSourceColumnRef, QueryTab, TableInfoTab, TableStructureEditorTarget } from "@/types/database";
+import { sanitizeTabPageUiState } from "@/lib/tabs/tabUiState";
 import { orderPinnedFirst } from "@/lib/app/pinnedItems";
 import { canCancelQueryExecution } from "@/lib/sql/queryExecutionState";
 import { buildExplainSql, parseExplainResult, parseDamengExplainText, parseOracleExplainText, sqlServerExplainResult, type BuildExplainSqlResult, type ExplainPlanDatabaseType } from "@/lib/diagram/explainPlan";
@@ -2318,6 +2319,7 @@ export const useQueryStore = defineStore("query", () => {
       mode: t.mode,
       autoCommit: t.autoCommit,
       resultAutoSave: t.resultAutoSave,
+      uiState: t.uiState,
       structureTableName: t.structureTableName,
       structureDraft: t.structureDraft,
       objectBrowser: t.objectBrowser,
@@ -4199,6 +4201,36 @@ export const useQueryStore = defineStore("query", () => {
     if (tab.editorViewport?.scrollTop === viewport.scrollTop && tab.editorViewport?.scrollLeft === viewport.scrollLeft) return;
     tab.editorViewport = viewport;
     queueSavedSqlEditorPositionPersist(tab);
+  }
+
+  function updateTabUiState(id: string, patch: Partial<NonNullable<QueryTab["uiState"]>>) {
+    const tab = tabs.value.find((candidate) => candidate.id === id);
+    if (!tab) return;
+    tab.uiState = { ...tab.uiState, ...patch };
+  }
+
+  function updateTabPageUiState(id: string, mode: string, patch: Record<string, unknown>, owner?: QueryTab) {
+    const tab = tabs.value.find((candidate) => candidate.id === id);
+    if (!tab || tab.mode !== mode || (owner && owner !== tab)) return;
+    const nextPageState = sanitizeTabPageUiState({ ...(tab.uiState?.page?.[mode] ?? {}), ...patch });
+    if (!nextPageState) return;
+    const page = sanitizeTabPageUiState({ ...(tab.uiState?.page ?? {}), [mode]: nextPageState });
+    if (!page) return;
+    tab.uiState = { ...tab.uiState, page: page as NonNullable<QueryTab["uiState"]>["page"] };
+  }
+
+  function updateTabPageResult(id: string, mode: string, result: QueryResult | undefined, owner?: QueryTab) {
+    const tab = tabs.value.find((candidate) => candidate.id === id);
+    if (!tab || tab.mode !== mode || (owner && owner !== tab)) return;
+    if (!result) {
+      clearResultPayload(tab);
+      return;
+    }
+    tab.results = undefined;
+    tab.activeResultIndex = undefined;
+    assignDisplayedResult(tab, result);
+    touchResult(tab);
+    scheduleResultCacheTrim();
   }
 
   function updateEditorSelection(id: string, selection: { anchor: number; head: number }) {
@@ -8023,6 +8055,9 @@ export const useQueryStore = defineStore("query", () => {
     updateDataGridLocalColumnFilters,
     updateDataGridHiddenColumnKeys,
     updateEditorViewport,
+    updateTabUiState,
+    updateTabPageUiState,
+    updateTabPageResult,
     updateEditorSelection,
     flushEditorState,
     updateObjectBrowserViewport,

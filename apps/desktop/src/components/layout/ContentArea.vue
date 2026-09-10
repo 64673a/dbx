@@ -9,6 +9,7 @@ import { hasQueryOutput as tabHasQueryOutput } from "@/lib/query/queryOutput";
 import { batchSqlRecoveryState, type BatchSqlRecoveryAction } from "@/lib/query/batchSqlRecovery";
 import type { CSSProperties } from "vue";
 import { useI18n } from "vue-i18n";
+import { provideTabUiState } from "@/lib/tabs/tabUiState";
 import {
   Check,
   CheckSquare2,
@@ -224,6 +225,11 @@ const emit = defineEmits<ContentAreaSurfaceEmits>();
 const { t, locale } = useI18n();
 const queryStore = useQueryStore();
 const connectionStore = useConnectionStore();
+provideTabUiState(() => {
+  const tab = props.activeTab;
+  const mode = tab.mode;
+  return { snapshot: tab.uiState?.page?.[mode] ?? {}, update: (patch) => queryStore.updateTabPageUiState(tab.id, mode, patch, tab) };
+});
 const canAccessEtcdAdmin = computed(() => connectionStore.getEtcdAccessCapabilities(props.activeTab.connectionId).admin);
 watch(
   () => [props.activeTab.connectionId, props.activeTab.mode] as const,
@@ -2449,7 +2455,18 @@ defineExpose({
     <!-- Vector mode: Qdrant and Milvus collections -->
     <template v-else-if="activeTab.mode === 'vector'">
       <div class="flex-1 min-h-0">
-        <VectorBrowser :key="activeTab.id" :connection-id="activeTab.connectionId" :database="activeTab.database" :collection="activeTab.sql" :collection-label="activeTab.title" :database-type="activeEffectiveDatabaseType" :dimension="activeTabDimension" :tenant="activeVectorConnection?.username" />
+        <VectorBrowser
+          :key="activeTab.id"
+          :connection-id="activeTab.connectionId"
+          :database="activeTab.database"
+          :collection="activeTab.sql"
+          :collection-label="activeTab.title"
+          :database-type="activeEffectiveDatabaseType"
+          :dimension="activeTabDimension"
+          :tenant="activeVectorConnection?.username"
+          :result="activeTab.result"
+          @update:result="queryStore.updateTabPageResult(activeTab.id, activeTab.mode, $event, activeTab)"
+        />
       </div>
     </template>
 
@@ -2491,7 +2508,7 @@ defineExpose({
 
     <template v-else-if="activeTab.mode === 'databases' && activeConnection">
       <div class="min-w-0 flex-1 min-h-0">
-        <DatabaseBrowser ref="databaseBrowserRef" :connection="activeConnection" />
+        <DatabaseBrowser ref="databaseBrowserRef" :key="activeTab.id" :connection="activeConnection" />
       </div>
     </template>
 

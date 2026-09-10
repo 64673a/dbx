@@ -1,4 +1,5 @@
-import type { QueryTab } from "@/types/database";
+import type { QueryTab, TabOutputView } from "@/types/database";
+import { sanitizeTabUiState } from "@/lib/tabs/tabUiState";
 
 export const OPEN_TABS_STORAGE_KEY = "dbx-open-tabs";
 export const ACTIVE_TAB_STORAGE_KEY = "dbx-active-tab";
@@ -64,6 +65,7 @@ export interface SavedOpenTab {
   resultRuns?: SavedQueryResultRun[];
   activeResultRunId?: string;
   resultAutoSave?: boolean;
+  uiState?: QueryTab["uiState"];
 }
 
 export interface RestoredOpenTabs {
@@ -127,6 +129,21 @@ function restoredEditorViewport(tab: SavedOpenTab): QueryTab["editorViewport"] {
     scrollTop: Math.max(0, viewport.scrollTop),
     scrollLeft: Math.max(0, viewport.scrollLeft),
   };
+}
+
+const TAB_OUTPUT_VIEWS = new Set<TabOutputView>(["result", "summary", "explain", "chart", "messages", "profile"]);
+
+function restoredTabUiState(tab: SavedOpenTab): QueryTab["uiState"] {
+  const activeOutputView = tab.uiState?.activeOutputView;
+  const resultPaneOpen = tab.uiState?.resultPaneOpen;
+  const restored: NonNullable<QueryTab["uiState"]> = {};
+  if (activeOutputView && TAB_OUTPUT_VIEWS.has(activeOutputView)) restored.activeOutputView = activeOutputView;
+  if (typeof resultPaneOpen === "boolean") restored.resultPaneOpen = resultPaneOpen;
+  if (tab.uiState?.page) {
+    const sanitized = sanitizeTabUiState({ page: tab.uiState.page });
+    if (sanitized?.page) restored.page = sanitized.page;
+  }
+  return Object.keys(restored).length > 0 ? restored : undefined;
 }
 
 export function serializeOpenTabs(tabs: QueryTab[]): SavedOpenTab[] {
@@ -195,6 +212,7 @@ export function serializeOpenTabs(tabs: QueryTab[]): SavedOpenTab[] {
       : {}),
     ...(tab.mode === "query" && tab.activeResultRunId !== undefined ? { activeResultRunId: tab.activeResultRunId } : {}),
     ...(tab.mode === "query" && typeof tab.resultAutoSave === "boolean" ? { resultAutoSave: tab.resultAutoSave } : {}),
+    ...(tab.uiState ? { uiState: sanitizeTabUiState(tab.uiState) } : {}),
   }));
 }
 
@@ -247,6 +265,7 @@ function restoreOpenTabsArray(parsed: unknown, rawActiveTabId: string | null, op
         resultRuns,
         activeResultRunId: resultRuns?.some((run) => run.id === tab.activeResultRunId) ? tab.activeResultRunId : resultRuns?.[0]?.id,
         resultAutoSave: mode === "query" && typeof tab.resultAutoSave === "boolean" ? tab.resultAutoSave : undefined,
+        uiState: restoredTabUiState(tab),
       };
     });
     const activeTabId = rawActiveTabId || null;

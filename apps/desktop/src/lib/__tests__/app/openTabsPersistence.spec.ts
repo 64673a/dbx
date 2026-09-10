@@ -21,6 +21,35 @@ function roundTrip(tabs: QueryTab[]) {
 }
 
 describe("openTabsPersistence originalSql round-trip", () => {
+  it("preserves per-tab output view state across a round-trip", () => {
+    const [restored] = roundTrip([queryTab({ uiState: { activeOutputView: "chart", resultPaneOpen: false } })]);
+
+    expect(restored.uiState).toEqual({ activeOutputView: "chart", resultPaneOpen: false });
+  });
+
+  it("preserves namespaced special-page state across a round-trip", () => {
+    const uiState = {
+      page: {
+        etcd: {
+          EtcdKeyBrowser: { mode: "search", searchQuery: "orders" },
+          KvKeyBrowser: { selectedKey: "/orders/42", expandedGroupIds: ["group:/orders"] },
+        },
+      },
+    };
+    const [restored] = roundTrip([queryTab({ mode: "etcd", uiState })]);
+
+    expect(restored.uiState).toEqual(uiState);
+  });
+
+  it("drops invalid per-tab output view state while restoring", () => {
+    const [restored] = restoreOpenTabsPayload({
+      tabs: [{ id: "t1", title: "query_1", connectionId: "c1", database: "db", mode: "query", sql: "", uiState: { activeOutputView: "invalid", resultPaneOpen: "false" } }],
+      activeTabId: "t1",
+    }).tabs;
+
+    expect(restored.uiState).toBeUndefined();
+  });
+
   it("keeps clean saved SQL tabs eligible for file hydration", () => {
     const [restored] = roundTrip([queryTab({ savedSqlId: "saved", sql: "SELECT 1", originalSql: "SELECT 1" })]);
     expect(restored.sql).toBe("");

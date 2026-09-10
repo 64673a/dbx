@@ -1152,6 +1152,18 @@ export interface QueryPageJumpProgress {
   targetPage: number;
 }
 
+export type TabOutputView = "result" | "summary" | "explain" | "chart" | "messages" | "profile";
+
+export type TabPageUiState = Record<string, unknown>;
+
+/** UI-only state that must survive an inactive tab's component being unmounted. */
+export interface TabUiState {
+  activeOutputView?: TabOutputView;
+  resultPaneOpen?: boolean;
+  /** Small JSON-compatible snapshots owned by special-page components. */
+  page?: Record<string, TabPageUiState>;
+}
+
 export interface QueryTab {
   id: string;
   /** Stable creation time used when tabs are displayed in creation order. */
@@ -1215,6 +1227,7 @@ export interface QueryTab {
   activeResultRunId?: string;
   /** Undefined inherits the default on open; false preserves an explicit per-tab opt-out. */
   resultAutoSave?: boolean;
+  uiState?: TabUiState;
   explainPlan?: import("@/lib/diagram/explainPlan").ParsedExplainPlan;
   /** MySQL's regular EXPLAIN result, kept alongside its JSON visual plan. */
   explainTableResult?: QueryResult;

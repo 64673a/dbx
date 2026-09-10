@@ -69,7 +69,7 @@ import { isTauriRuntime } from "@/lib/backend/tauriRuntime";
 import { openQueryResultArchiveFile } from "@/lib/query/queryResultArchiveFile";
 import { rememberExternalSqlFileTarget, resolveExternalSqlFileTarget, unassociatedExternalSqlFileTarget } from "@/lib/sql/externalSqlFileTarget";
 import { externalSqlFileOpenErrorMessage, externalSqlEditorMaxBytes, isSqlFilePath, readBrowserSqlFile, sqlFileTitleFromPath } from "@/lib/sql/sqlFileOpen";
-import type { ConnectionConfig, DatabaseType, ObjectBrowserFilter, ObjectSourceKind, QueryTab, TreeNode } from "@/types/database";
+import type { ConnectionConfig, DatabaseType, ObjectBrowserFilter, ObjectSourceKind, QueryTab, TabOutputView, TreeNode } from "@/types/database";
 import { parseConnectionDeepLink, type ConnectionDeepLinkDraft } from "@/lib/connection/connectionDeepLink";
 import { parseAiConfigDeepLink, type AiConfigDeepLinkDraft } from "@/lib/ai/aiConfigDeepLink";
 import { activeDesktopAiRuns, blockingDesktopAiRunsForQuit } from "@/lib/ai/desktopAiRunRegistry";
@@ -361,7 +361,13 @@ const cursorPos = ref(0);
 const previewChangesAvailable = ref(false);
 const formatSqlRequest = ref<{ id: number; tabId: string } | null>(null);
 const compressSqlRequest = ref<{ id: number; tabId: string } | null>(null);
-const activeOutputView = ref<"result" | "summary" | "explain" | "chart" | "messages" | "profile">("result");
+const activeOutputView = computed<TabOutputView>({
+  get: () => activeTab.value?.uiState?.activeOutputView ?? "result",
+  set: (view) => {
+    const tab = activeTab.value;
+    if (tab) queryStore.updateTabUiState(tab.id, { activeOutputView: view });
+  },
+});
 const newQueryContextSource = ref<"tab" | "sidebar">("tab");
 const queryEditorDdlTarget = ref<{ connectionId: string; database: string; catalog?: string; schema?: string; tableName: string; objectType?: ObjectSourceKind } | null>(null);
 const queryEditorObjectSourceTarget = ref<{
@@ -657,7 +663,7 @@ async function setupDetachedWindowEvents() {
 async function detachTab(tab: QueryTab, position?: { x: number; y: number }) {
   if (isDetachedWindowContext || !isDetachableTab(tab)) return;
   try {
-    const handoff = await queryStore.prepareDetachedTab(tab.id, { activeOutputView: tab.id === queryStore.activeTabId ? activeOutputView.value : "result" });
+    const handoff = await queryStore.prepareDetachedTab(tab.id, { activeOutputView: tab.id === queryStore.activeTabId ? activeOutputView.value : (tab.uiState?.activeOutputView ?? "result") });
     await api.saveDetachedTabHandoff(tab.id, handoff);
     const result = await openDetachedTabWindow(tab.id, tab.title, position);
     if (!result.opened) {
@@ -1249,8 +1255,10 @@ watch(
     if (id) newQueryContextSource.value = "tab";
     if (id) activateQuerySurface();
     else if (previousId) activateOpenSpecialPageFallback();
-    selectedSql.value = "";
-    activeOutputView.value = "result";
+    const tab = id ? queryStore.tabs.find((candidate) => candidate.id === id) : undefined;
+    const selection = tab?.editorSelection;
+    selectedSql.value = tab && selection && selection.anchor !== selection.head ? tab.sql.slice(Math.min(selection.anchor, selection.head), Math.max(selection.anchor, selection.head)) : "";
+    cursorPos.value = selection?.head ?? 0;
     if (id) queryStore.reloadEvictedTab(id);
   },
 );
@@ -3644,8 +3652,8 @@ onUnmounted(() => {
                     :block-dangerous-redis-commands="blockDangerousRedisCommands"
                     :zen-mode="isZenMode"
                     @update:active-output-view="
-                      (tabId: string, view: 'result' | 'summary' | 'explain' | 'chart' | 'messages' | 'profile') => {
-                        if (tabId === queryStore.activeTabId) activeOutputView = view;
+                      (tabId: string, view: TabOutputView) => {
+                        if (tabId === queryStore.activeTabId) queryStore.updateTabUiState(tabId, { activeOutputView: view });
                       }
                     "
                     @preview-changes-available="
