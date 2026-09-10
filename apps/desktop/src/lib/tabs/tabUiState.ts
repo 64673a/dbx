@@ -2,6 +2,7 @@ import { inject, onBeforeUnmount, provide, watch, type InjectionKey } from "vue"
 import type { TabPageUiState, TabUiState } from "@/types/database";
 
 export const MAX_TAB_PAGE_UI_STATE_BYTES = 64 * 1024;
+export const TAB_UI_STATE_TRACK_DEBOUNCE_MS = 100;
 
 interface TabUiStateContext {
   snapshot: TabPageUiState;
@@ -28,11 +29,28 @@ export function useTabUiState<T extends object>(
   const update = (patch: Partial<T>) => {
     if (active) context?.update(namespace ? { [namespace]: patch } : (patch as TabPageUiState));
   };
-  const track = (snapshot: () => Partial<T>) => {
-    const stop = watch(snapshot, update, { deep: true, flush: "post" });
-    onBeforeUnmount(() => {
+  const track = (snapshot: () => Partial<T>, debounceMs = TAB_UI_STATE_TRACK_DEBOUNCE_MS) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const flush = () => {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
       update(snapshot());
+    };
+    const schedule = () => {
+      if (!active) return;
+      if (timer !== undefined) clearTimeout(timer);
+      if (debounceMs <= 0) {
+        flush();
+        return;
+      }
+      timer = setTimeout(flush, debounceMs);
+    };
+    const stop = watch(snapshot, schedule, { deep: true, flush: "post" });
+    onBeforeUnmount(() => {
       stop();
+      flush();
       active = false;
     });
   };

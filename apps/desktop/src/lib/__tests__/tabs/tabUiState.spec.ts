@@ -1,8 +1,8 @@
 /** @vitest-environment happy-dom */
 
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
-import { afterEach, describe, expect, it } from "vitest";
-import { MAX_TAB_PAGE_UI_STATE_BYTES, provideTabUiState, sanitizeTabPageUiState, sanitizeTabUiState, useTabUiState } from "@/lib/tabs/tabUiState";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { MAX_TAB_PAGE_UI_STATE_BYTES, provideTabUiState, sanitizeTabPageUiState, sanitizeTabUiState, TAB_UI_STATE_TRACK_DEBOUNCE_MS, useTabUiState } from "@/lib/tabs/tabUiState";
 
 const mounted: Array<{ unmount: () => void; host: HTMLElement }> = [];
 
@@ -11,10 +11,12 @@ afterEach(() => {
     unmount();
     host.remove();
   }
+  vi.useRealTimers();
 });
 
 describe("tabUiState", () => {
   it("restores a namespace and flushes its last value before unmount", async () => {
+    vi.useFakeTimers();
     const updates: unknown[] = [];
     const trackedValue = ref(0);
     let initialValue = 0;
@@ -52,6 +54,9 @@ describe("tabUiState", () => {
     expect(captureCount).toBe(1);
 
     trackedValue.value = 8;
+    await nextTick();
+    expect(updates).toHaveLength(0);
+    vi.advanceTimersByTime(TAB_UI_STATE_TRACK_DEBOUNCE_MS);
     await nextTick();
     expect(updates.at(-1)).toEqual({ Panel: { value: 8 } });
 
