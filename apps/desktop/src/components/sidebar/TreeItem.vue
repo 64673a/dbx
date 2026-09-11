@@ -1605,8 +1605,14 @@ function onKeydown(event: KeyboardEvent) {
                   node.type === 'group-materialized-views' ||
                   node.type === 'group-procedures' ||
                   node.type === 'group-functions' ||
+                  node.type === 'group-columns' ||
+                  node.type === 'group-indexes' ||
+                  node.type === 'group-fkeys' ||
                   node.type === 'group-triggers' ||
                   node.type === 'group-events' ||
+                  node.type === 'group-constraints' ||
+                  node.type === 'group-table-partitions' ||
+                  node.type === 'group-table-subpartitions' ||
                   node.type === 'group-sequences' ||
                   node.type === 'group-synonyms' ||
                   node.type === 'group-jobs' ||
