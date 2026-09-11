@@ -4991,6 +4991,9 @@ export default withEnglishFallback({
       },
     },
     field: "campo",
+    keySearchHistory: "Cronologia ricerche",
+    keySearchHistoryForget: "Rimuovi dalla cronologia",
+    keySearchHistoryEmpty: "Nessuna cronologia",
   },
   mongo: {
     documents: "{count} documenti",
