@@ -1,8 +1,13 @@
 // @vitest-environment happy-dom
-import { createApp, nextTick } from "vue";
+import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import { createPinia, setActivePinia } from "pinia";
 import { createI18n } from "vue-i18n";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const lifecycle = vi.hoisted(() => ({
+  queryCreated: 0,
+  queryUnmounted: 0,
+}));
 
 vi.mock("@/components/layout/EditorGroupTabBar.vue", () => ({
   default: {
@@ -23,6 +28,12 @@ vi.mock("@/components/layout/QueryEditorSurface.vue", () => ({
   default: {
     name: "QueryEditorSurfaceStub",
     props: ["activeTab", "autoFocus"],
+    created() {
+      lifecycle.queryCreated += 1;
+    },
+    unmounted() {
+      lifecycle.queryUnmounted += 1;
+    },
     template: `<div data-test="query-editor">{{ activeTab.id }}</div>`,
   },
 }));
@@ -66,6 +77,8 @@ describe("EditorGroup mount contract", () => {
 
   beforeEach(() => {
     document.body.innerHTML = "";
+    lifecycle.queryCreated = 0;
+    lifecycle.queryUnmounted = 0;
     pinia = createPinia();
     setActivePinia(pinia);
     i18n = createI18n({
@@ -73,6 +86,49 @@ describe("EditorGroup mount contract", () => {
       locale: "en",
       messages: { en: {} },
     });
+  });
+
+  it("keeps a bounded hot surface cache while switching query tabs", async () => {
+    const store = useQueryStore();
+    store.tabs = [tab("tab-a"), tab("tab-b")];
+    const activeTabId = ref("tab-a");
+    const host = createHost();
+    const root = defineComponent({
+      setup() {
+        return () =>
+          h(EditorGroup, {
+            groupId: "group-1",
+            tabIds: ["tab-a", "tab-b"],
+            activeTabId: activeTabId.value,
+            activeTab: tab(activeTabId.value),
+            activeConnection: undefined,
+            executableSql: "SELECT 1",
+            activeOutputView: "result",
+            formatSqlRequest: null,
+            compressSqlRequest: null,
+            selectedSql: "",
+            cursorPos: 0,
+            blockDangerousRedisCommands: false,
+          });
+      },
+    });
+    const app = createApp(root);
+    app.use(pinia);
+    app.use(i18n);
+    app.mount(host);
+    await nextTick();
+
+    activeTabId.value = "tab-b";
+    await nextTick();
+    activeTabId.value = "tab-a";
+    await nextTick();
+
+    expect(lifecycle.queryCreated).toBe(2);
+    expect(lifecycle.queryUnmounted).toBe(0);
+
+    app.unmount();
+    expect(lifecycle.queryUnmounted).toBe(2);
+    host.remove();
   });
 
   it("passes the group active tab to the query editor surface instead of the global active tab", async () => {
