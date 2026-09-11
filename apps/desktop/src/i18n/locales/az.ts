@@ -3637,6 +3637,7 @@ export default withEnglishFallback({
     },
     linkedServers: "Əlaqələndirilmiş serverlər",
     defaultDatabase: "Standart verilənlər bazası",
+    elasticsearchAlias: "Təxəllüs",
     columns: "Sütunlar",
     attributes: "Atributlar",
     methods: "Metodlar",

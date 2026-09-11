@@ -3636,6 +3636,7 @@ export default {
     },
     linkedServers: "Linked Servers",
     defaultDatabase: "Default DB",
+    elasticsearchAlias: "Alias",
     columns: "Columns",
     attributes: "Attributes",
     methods: "Methods",

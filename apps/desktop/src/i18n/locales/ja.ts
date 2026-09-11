@@ -3541,6 +3541,7 @@ export default withEnglishFallback({
       no: "いいえ",
     },
     defaultDatabase: "デフォルトDB",
+    elasticsearchAlias: "エイリアス",
     columns: "列",
     attributes: "属性",
     methods: "メソッド",

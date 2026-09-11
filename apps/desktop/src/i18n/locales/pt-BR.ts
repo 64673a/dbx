@@ -3519,6 +3519,7 @@ export default withEnglishFallback({
     linkedServers: "Servidores Vinculados",
     materializedViews: "Visualizações Materializadas",
     defaultDatabase: "Banco padrão",
+    elasticsearchAlias: "Alias",
     columns: "Colunas",
     attributes: "Atributos",
     methods: "Métodos",

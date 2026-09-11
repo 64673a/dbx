@@ -3518,6 +3518,7 @@ export default withEnglishFallback({
     },
     linkedServers: "Servidores vinculados",
     defaultDatabase: "Base predeterminada",
+    elasticsearchAlias: "Alias",
     columns: "Columnas",
     attributes: "Atributos",
     methods: "Métodos",
