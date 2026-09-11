@@ -18,7 +18,7 @@ use crate::models::connection::{ConnectionConfig, DatabaseType};
 use crate::object_source_sql::{build_executable_object_source_statements, EditableObjectSourceSqlInput};
 use crate::query::{
     agent_execute_query_params, is_dbx_query_timeout_error, pool_error_action, query_timeout_duration,
-    wait_for_query_opt, PoolErrorAction, QueryExecutionOptions, AGENT_PROTOCOL_MAX_ROWS,
+    wait_for_query_opt, PoolErrorAction, QueryExecutionOptions, StreamProgressClock, AGENT_PROTOCOL_MAX_ROWS,
 };
 use crate::sql::{split_sql_statements, split_sql_statements_for_database};
 use crate::sql_dialect::{
@@ -4854,7 +4854,19 @@ fn value_to_sql_literal(value: &serde_json::Value, _db_type: &DatabaseType) -> S
 /// dialects keep OFFSET paging (each page rescans and discards the rows before
 /// it, which is quadratic in table size) until their literal rules are audited.
 fn transfer_keyset_pagination_supported(db_type: &DatabaseType) -> bool {
-    matches!(db_type, DatabaseType::Postgres | DatabaseType::OpenGauss | DatabaseType::Gaussdb | DatabaseType::Kingbase)
+    matches!(
+        db_type,
+        DatabaseType::Postgres
+            | DatabaseType::OpenGauss
+            | DatabaseType::Gaussdb
+            | DatabaseType::Kingbase
+            | DatabaseType::Mysql
+            | DatabaseType::Doris
+            | DatabaseType::StarRocks
+            | DatabaseType::ManticoreSearch
+            | DatabaseType::Sqlite
+            | DatabaseType::SqlServer
+    )
 }
 
 /// Column types whose keyset cursor value round-trips through a SQL text
@@ -4894,6 +4906,77 @@ fn postgres_keyset_column_type_supported(data_type: &str) -> bool {
     SUPPORTED_PREFIXES.iter().any(|prefix| base.starts_with(prefix))
 }
 
+/// Dialect-aware keyset column-type gate. The Postgres family is covered by
+/// [`postgres_keyset_column_type_supported`]; MySQL-family, SQLite and SQL Server
+/// primary-key types that round-trip through `value_to_sql_literal` are enabled
+/// here. Binary types stay OFF — their JSON form is lossy — so those keys keep
+/// OFFSET paging.
+fn keyset_column_type_supported(db_type: &DatabaseType, data_type: &str) -> bool {
+    match db_type {
+        DatabaseType::Mysql | DatabaseType::Doris | DatabaseType::StarRocks | DatabaseType::ManticoreSearch => {
+            mysql_keyset_column_type_supported(data_type)
+        }
+        DatabaseType::Sqlite => sqlite_keyset_column_type_supported(data_type),
+        DatabaseType::SqlServer => sqlserver_keyset_column_type_supported(data_type),
+        _ => postgres_keyset_column_type_supported(data_type),
+    }
+}
+
+fn mysql_keyset_column_type_supported(data_type: &str) -> bool {
+    let base = data_type.trim().to_ascii_lowercase();
+    let base = base.split('(').next().unwrap_or("").trim();
+    const SUPPORTED: &[&str] = &[
+        "int",
+        "integer",
+        "tinyint",
+        "smallint",
+        "mediumint",
+        "bigint",
+        "char",
+        "varchar",
+        "date",
+        "datetime",
+        "timestamp",
+        "year",
+        "decimal",
+        "numeric",
+    ];
+    SUPPORTED.iter().any(|prefix| base.starts_with(prefix))
+}
+
+fn sqlite_keyset_column_type_supported(data_type: &str) -> bool {
+    let base = data_type.trim().to_ascii_lowercase();
+    let base = base.split('(').next().unwrap_or("").trim();
+    const SUPPORTED: &[&str] = &["int", "integer", "text", "char", "varchar", "character", "numeric", "decimal"];
+    SUPPORTED.iter().any(|prefix| base.starts_with(prefix))
+}
+
+fn sqlserver_keyset_column_type_supported(data_type: &str) -> bool {
+    let base = data_type.trim().to_ascii_lowercase();
+    let base = base.split('(').next().unwrap_or("").trim();
+    const SUPPORTED: &[&str] = &[
+        "int",
+        "bigint",
+        "smallint",
+        "tinyint",
+        "char",
+        "varchar",
+        "nchar",
+        "nvarchar",
+        "uniqueidentifier",
+        "date",
+        "datetime",
+        "datetime2",
+        "smalldatetime",
+        "time",
+        "decimal",
+        "numeric",
+        "money",
+        "smallmoney",
+    ];
+    SUPPORTED.iter().any(|prefix| base.starts_with(prefix))
+}
+
 /// Resolves the source primary key columns to their positions in the selected
 /// column list. Returns None — meaning the read loop keeps OFFSET paging — when
 /// the dialect is not keyset-capable, when a key column is not among the
@@ -4911,7 +4994,7 @@ fn transfer_keyset_column_indexes(
         .iter()
         .map(|pk| {
             let index = columns.iter().position(|column| column.name == *pk)?;
-            postgres_keyset_column_type_supported(&columns[index].data_type).then_some(index)
+            keyset_column_type_supported(db_type, &columns[index].data_type).then_some(index)
         })
         .collect()
 }
@@ -5492,24 +5575,47 @@ async fn execute_on_pool_once(
     let pool_handle = state.pool_handle(pool_key).await;
     let pool = pool_handle.as_ref().ok_or("Connection not found")?;
 
+    // Transfer reads run under the per-connection operation budget. Drivers that
+    // expose an incremental result stream (MySQL, PostgreSQL, SQLite, SQL Server)
+    // use a *progress-aware* budget: the configured query timeout is an inactivity
+    // window reset for every row the server delivers, so transferring a large
+    // table is no longer cancelled just for exceeding the timeout in total. Drivers
+    // whose protocol returns the whole result in one shot — ClickHouse, InfluxDB,
+    // the Agent/JDBC path, external drivers and the DuckDB sidecar worker — expose
+    // no incremental progress, so they keep the plain wall-clock timeout.
     let result = match pool {
         PoolKind::Mysql(p, mode) => {
             let p = p.clone();
             let bare = *mode == crate::connection::MysqlMode::Bare;
-            wait_for_query_opt(
-                None,
+            // Row-returning reads run under a progress-aware budget: the timeout
+            // resets for every row the server delivers, so a large table is no
+            // longer cancelled just for taking longer than the timeout overall.
+            let progress_clock = Arc::new(StreamProgressClock::new());
+            db::mysql::execute_query_with_max_rows_progress(
+                &p,
+                sql,
+                bare,
+                max_rows,
+                Default::default(),
+                progress_clock,
                 query_timeout,
-                db::mysql::execute_query_with_max_rows(&p, sql, bare, max_rows, Default::default()),
             )
             .await
         }
         PoolKind::Postgres(p) => {
             let p = p.clone();
-            wait_for_query_opt(None, query_timeout, db::postgres::execute_query_with_max_rows(&p, sql, max_rows)).await
+            // Row-returning reads — the paging SELECTs a transfer issues — run
+            // under the driver's progress-aware budget: the configured query
+            // timeout becomes an inactivity window reset by every row the server
+            // delivers, so a large table is no longer cancelled just for taking
+            // longer than the timeout in total.
+            let progress_clock = Arc::new(StreamProgressClock::new());
+            db::postgres::execute_query_with_max_rows_progress(&p, sql, max_rows, progress_clock, query_timeout).await
         }
         PoolKind::Sqlite(p) => {
             let p = p.clone();
-            wait_for_query_opt(None, query_timeout, db::sqlite::execute_query_with_max_rows(&p, sql, max_rows)).await
+            let progress_clock = Arc::new(StreamProgressClock::new());
+            db::sqlite::execute_query_with_max_rows_progress(&p, sql, max_rows, progress_clock, query_timeout).await
         }
         PoolKind::ClickHouse(client) => {
             let client = client.clone();
@@ -5539,10 +5645,16 @@ async fn execute_on_pool_once(
         PoolKind::SqlServer(client) => {
             let client = client.clone();
             let mut client = client.lock().await;
-            let result = wait_for_query_opt(
-                None,
+            // Row-returning reads use the driver's progress-aware budget (see the
+            // SQL Server driver): a long but steady stream is never cancelled just
+            // for exceeding the timeout in total.
+            let progress_clock = Arc::new(StreamProgressClock::new());
+            let result = db::sqlserver::execute_query_with_max_rows_progress(
+                &mut client,
+                sql,
+                max_rows,
+                progress_clock,
                 query_timeout,
-                db::sqlserver::execute_query_with_max_rows(&mut client, sql, max_rows),
             )
             .await;
             drop(client);
@@ -7596,7 +7708,11 @@ where
                     request.source_catalog.as_deref(),
                 )
             };
-            let result = execute_on_pool(state, source_pool_key, &sql).await?;
+            // Cap the result at `batch_size` (not the 10k default row limit): the
+            // paging SELECT is already `LIMIT batch_size`, and the loop below treats a
+            // short page as the last page. Capping lower than `batch_size` would make a
+            // large batch look short and truncate the transfer early.
+            let result = execute_on_pool_with_max_rows(state, source_pool_key, &sql, Some(batch_size)).await?;
             if let Some(indexes) = keyset_indexes.as_deref() {
                 match advance_keyset_cursor(&mut keyset_cursor, &result.rows, indexes, table)? {
                     KeysetAdvance::Advanced => {}
@@ -8815,7 +8931,12 @@ where
                 };
                 let (sql, mysql_spatial_markers) =
                     mysql_spatial_transfer_select_sql(sql, &col_names, &col_types, source_db_type, target_db_type);
-                (execute_on_pool(state, source_pool_key, &sql).await?, mysql_spatial_markers)
+                // Cap the result at `batch_size` (not the 10k default row limit), so a
+                // large batch is never truncated into looking like a short final page.
+                (
+                    execute_on_pool_with_max_rows(state, source_pool_key, &sql, Some(batch_size)).await?,
+                    mysql_spatial_markers,
+                )
             };
             let has_more = result.has_more;
             let row_count = result.rows.len();
@@ -13215,11 +13336,37 @@ mod tests {
         assert_eq!(transfer_keyset_column_indexes(&columns, &pks, &DatabaseType::OpenGauss), Some(vec![0]));
         assert_eq!(transfer_keyset_column_indexes(&columns, &pks, &DatabaseType::Gaussdb), Some(vec![0]));
         assert_eq!(transfer_keyset_column_indexes(&columns, &pks, &DatabaseType::Kingbase), Some(vec![0]));
+        assert_eq!(transfer_keyset_column_indexes(&columns, &pks, &DatabaseType::Mysql), Some(vec![0]));
+        assert_eq!(transfer_keyset_column_indexes(&columns, &pks, &DatabaseType::Sqlite), Some(vec![0]));
+        assert_eq!(transfer_keyset_column_indexes(&columns, &pks, &DatabaseType::SqlServer), Some(vec![0]));
         // Dialects whose cursor literal rendering is not audited keep OFFSET paging.
-        assert_eq!(transfer_keyset_column_indexes(&columns, &pks, &DatabaseType::Mysql), None);
-        assert_eq!(transfer_keyset_column_indexes(&columns, &pks, &DatabaseType::SqlServer), None);
+        assert_eq!(transfer_keyset_column_indexes(&columns, &pks, &DatabaseType::ClickHouse), None);
         // No primary key → no keyset cursor.
         assert_eq!(transfer_keyset_column_indexes(&columns, &[], &DatabaseType::Postgres), None);
+    }
+
+    #[test]
+    fn mysql_sqlite_sqlserver_keyset_column_types_are_audited() {
+        // MySQL-family: integers, strings, dates and decimals round-trip; binary/blob stay OFF.
+        assert!(keyset_column_type_supported(&DatabaseType::Mysql, "int"));
+        assert!(keyset_column_type_supported(&DatabaseType::Mysql, "bigint unsigned"));
+        assert!(keyset_column_type_supported(&DatabaseType::Mysql, "varchar(64)"));
+        assert!(keyset_column_type_supported(&DatabaseType::Mysql, "datetime"));
+        assert!(!keyset_column_type_supported(&DatabaseType::Mysql, "binary(16)"));
+        assert!(!keyset_column_type_supported(&DatabaseType::Mysql, "varbinary(255)"));
+        assert!(!keyset_column_type_supported(&DatabaseType::Mysql, "blob"));
+
+        // SQLite: integer/text; blob stays OFF.
+        assert!(keyset_column_type_supported(&DatabaseType::Sqlite, "INTEGER"));
+        assert!(keyset_column_type_supported(&DatabaseType::Sqlite, "TEXT"));
+        assert!(!keyset_column_type_supported(&DatabaseType::Sqlite, "BLOB"));
+
+        // SQL Server: integers, strings, uniqueidentifier, dates; binary stays OFF.
+        assert!(keyset_column_type_supported(&DatabaseType::SqlServer, "int"));
+        assert!(keyset_column_type_supported(&DatabaseType::SqlServer, "nvarchar(64)"));
+        assert!(keyset_column_type_supported(&DatabaseType::SqlServer, "uniqueidentifier"));
+        assert!(keyset_column_type_supported(&DatabaseType::SqlServer, "datetime2"));
+        assert!(!keyset_column_type_supported(&DatabaseType::SqlServer, "varbinary(32)"));
     }
 
     #[test]
