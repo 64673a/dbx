@@ -4163,6 +4163,39 @@ function getObjectBrowserMenuItems(item: ObjectBrowserRow): ContextMenuItem[] {
   overflow-x: auto;
 }
 
+/* Keep the horizontal track discoverable when the platform uses overlay
+   scrollbars, while leaving the native vertical scrollbar in place. */
+.object-browser-scroller::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.object-browser-scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.object-browser-scroller::-webkit-scrollbar-thumb {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: rgba(82, 82, 82, 0.28);
+  background: color-mix(in oklch, var(--foreground) 28%, transparent);
+  background-clip: padding-box;
+}
+
+.object-browser-scroller:hover::-webkit-scrollbar-thumb {
+  border: 0;
+  background: rgba(82, 82, 82, 0.45);
+  background: color-mix(in oklch, var(--foreground) 45%, transparent);
+}
+
+html.dbx-legacy-webview.dark .object-browser-scroller::-webkit-scrollbar-thumb {
+  background: rgba(212, 212, 216, 0.28);
+}
+
+html.dbx-legacy-webview.dark .object-browser-scroller:hover::-webkit-scrollbar-thumb {
+  background: rgba(212, 212, 216, 0.45);
+}
+
 /* The scroller itself stays viewport-width so its vertical scrollbar remains
    visible at the right edge; the row content inside scrolls horizontally past
    that width instead (issue #8885). */
