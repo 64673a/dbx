@@ -944,6 +944,8 @@ export type TreeNodeType =
   | "group-types"
   | "group-sequences"
   | "group-synonyms"
+  | "oracle-db-links"
+  | "oracle-db-link"
   | "group-jobs"
   | "group-packages"
   | "group-partitions"

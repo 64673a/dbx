@@ -177,6 +177,7 @@ import { loadObjectDdl } from "@/lib/metadata/objectDdlCache";
 import { loadObjectMetadataFacet } from "@/lib/metadata/objectMetadataCache";
 import { queryContextObjectActions, queryContextObjectRoute, queryTableCandidateAtSqlPosition, queryTableNavigationTargetAtSqlPosition, resolveQueryContextCandidateDatabase, resolveQueryContextObjectTarget, type QueryContextObjectAction } from "@/lib/sql/queryCursorTableTarget";
 import * as api from "@/lib/backend/api";
+import { oracleDatabaseLinkCompletionContext, oracleDatabaseLinkCompletionItems } from "@/lib/sql/oracleDatabaseLinkCompletion";
 import { isTauriRuntime } from "@/lib/backend/tauriRuntime";
 import { isMacOS } from "@/lib/backend/platform";
 import {
@@ -4619,6 +4620,7 @@ async function provideSqlCompletions(context: CompletionContext) {
   if (props.databaseType === "victoriametrics") return null;
   const hasDatabase = props.database != null;
   const sequenceLiteralContext = getPostgresSequenceLiteralCompletionContext(fullDoc, position, props.databaseType);
+  const databaseLinkContext = oracleDatabaseLinkCompletionContext(fullDoc, position, props.databaseType);
 
   const epoch = ++completionEpoch;
 
@@ -4647,12 +4649,12 @@ async function provideSqlCompletions(context: CompletionContext) {
 
       // require-prefix: only compute local facts (no positionalEligible).
       if (mode === "require-prefix") {
-        const ctx = sequenceLiteralContext ?? getEditorSqlCompletionContext(fullDoc, position);
+        const ctx = databaseLinkContext ?? sequenceLiteralContext ?? getEditorSqlCompletionContext(fullDoc, position);
         const prevChar = fullDoc[position - 1] ?? "";
         const facts: SqlCompletionTriggerFacts = {
           origin,
           hasIdentifierPrefix: ctx.prefix.length > 0,
-          qualifierTriggered: prevChar === "." && ("from" in ctx ? ctx.schema != null : ctx.qualifier != null),
+          qualifierTriggered: !!databaseLinkContext || (prevChar === "." && ("schema" in ctx ? ctx.schema != null : "qualifier" in ctx && ctx.qualifier != null)),
           useDatabasePrefix,
         };
         if (!shouldAllowSqlCompletionTrigger(mode, facts)) return null;
@@ -4660,13 +4662,13 @@ async function provideSqlCompletions(context: CompletionContext) {
 
       // positional: compute positionalEligible (lazy).
       if (mode === "positional") {
-        const ctx = sequenceLiteralContext ?? getEditorSqlCompletionContext(fullDoc, position);
+        const ctx = databaseLinkContext ?? sequenceLiteralContext ?? getEditorSqlCompletionContext(fullDoc, position);
         const prevChar = fullDoc[position - 1] ?? "";
         const positionalEligible = shouldAutoOpenSqlCompletion(fullDoc, position, sqlCompletionDialectOptions());
         const facts: SqlCompletionTriggerFacts = {
           origin,
           hasIdentifierPrefix: ctx.prefix.length > 0,
-          qualifierTriggered: prevChar === "." && ("from" in ctx ? ctx.schema != null : ctx.qualifier != null),
+          qualifierTriggered: !!databaseLinkContext || (prevChar === "." && ("schema" in ctx ? ctx.schema != null : "qualifier" in ctx && ctx.qualifier != null)),
           useDatabasePrefix,
           positionalEligible,
         };
@@ -4700,6 +4702,27 @@ async function provideSqlCompletions(context: CompletionContext) {
       });
       const items = buildSqlServerUseDatabaseCompletionItems(databaseNames, useDatabaseCompletion);
       return buildCompletionResult(items, useDatabaseCompletion.from, undefined, useDatabaseCompletion.prefix);
+    }
+
+    if (databaseLinkContext) {
+      if (!hasDatabase) return null;
+      const links = await connectionStore.listOracleDatabaseLinks(props.connectionId, props.database!);
+      if (epoch !== completionEpoch) return null;
+      return {
+        from: databaseLinkContext.from,
+        to: databaseLinkContext.to,
+        options: oracleDatabaseLinkCompletionItems(links, databaseLinkContext.prefix).map((item) => ({
+          ...item,
+          apply(editor: EditorViewType, _completion: unknown, from: number, to: number) {
+            markCompletionAccepted({ label: item.label, type: "text", boost: 0 });
+            // Keep the entire link suffix intact and use the normal completion
+            // transaction so accepting a link does not immediately reopen the menu.
+            if (codeMirrorInsertCompletionText) editor.dispatch(codeMirrorInsertCompletionText(editor.state, item.apply, from, to));
+            else editor.dispatch({ changes: { from, to, insert: item.apply }, selection: { anchor: from + item.apply.length } });
+          },
+        })),
+        validFor: /^[A-Za-z0-9_$#.]*$/,
+      };
     }
 
     if (sequenceLiteralContext) {
@@ -4912,6 +4935,7 @@ function flushImeComposition() {
  */
 function shouldTriggerSqlCompletionForPosition(fullDoc: string, position: number): boolean {
   const sequenceLiteralContext = getPostgresSequenceLiteralCompletionContext(fullDoc, position, props.databaseType);
+  const databaseLinkContext = oracleDatabaseLinkCompletionContext(fullDoc, position, props.databaseType);
   if (isSqlCompletionSuppressedContext(fullDoc, position, { databaseType: props.databaseType, editorState: view.value?.state }) && !sequenceLiteralContext) return false;
   const mode = settingsStore.editorSettings.completionTriggerMode;
   if (mode === "manual") return false;
@@ -4924,25 +4948,25 @@ function shouldTriggerSqlCompletionForPosition(fullDoc: string, position: number
   const useDatabasePrefix = useDatabaseCompletion?.prefix ?? null;
 
   if (mode === "require-prefix") {
-    const ctx = sequenceLiteralContext ?? getEditorSqlCompletionContext(fullDoc, position);
+    const ctx = databaseLinkContext ?? sequenceLiteralContext ?? getEditorSqlCompletionContext(fullDoc, position);
     const prevChar = fullDoc[position - 1] ?? "";
     const facts: SqlCompletionTriggerFacts = {
       origin: "typing",
       hasIdentifierPrefix: ctx.prefix.length > 0,
-      qualifierTriggered: prevChar === "." && ("from" in ctx ? ctx.schema != null : ctx.qualifier != null),
+      qualifierTriggered: !!databaseLinkContext || (prevChar === "." && ("schema" in ctx ? ctx.schema != null : "qualifier" in ctx && ctx.qualifier != null)),
       useDatabasePrefix,
     };
     return shouldAllowSqlCompletionTrigger(mode, facts);
   }
 
   // positional
-  const ctx = sequenceLiteralContext ?? getEditorSqlCompletionContext(fullDoc, position);
+  const ctx = databaseLinkContext ?? sequenceLiteralContext ?? getEditorSqlCompletionContext(fullDoc, position);
   const prevChar = fullDoc[position - 1] ?? "";
   const positionalEligible = shouldAutoOpenSqlCompletion(fullDoc, position, sqlCompletionDialectOptions());
   const facts: SqlCompletionTriggerFacts = {
     origin: "typing",
     hasIdentifierPrefix: ctx.prefix.length > 0,
-    qualifierTriggered: prevChar === "." && ("from" in ctx ? ctx.schema != null : ctx.qualifier != null),
+    qualifierTriggered: !!databaseLinkContext || (prevChar === "." && ("schema" in ctx ? ctx.schema != null : "qualifier" in ctx && ctx.qualifier != null)),
     useDatabasePrefix,
     positionalEligible,
   };
