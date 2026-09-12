@@ -478,7 +478,7 @@ function onObjectsScroll() {
 // hidden), so keep its programmatic scrollLeft aligned with the scroller's
 // horizontal position on every scroll, resize, and (re)attach.
 function syncObjectListHeaderScroll() {
-  if (!isListView) return;
+  if (!isListView.value) return;
   const header = objectListHeaderRef.value;
   const el = scrollerElement(listScrollerRef.value);
   if (!header || !el) return;
@@ -3492,7 +3492,7 @@ function getObjectBrowserMenuItems(item: ObjectBrowserRow): ContextMenuItem[] {
     </div>
     <div v-else class="flex min-h-0 min-w-0 flex-1" :class="{ 'event-editor-layout': isEventEditor }">
       <div class="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div v-if="isListView" ref="objectListTableRef" class="object-browser-table flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div v-if="isListView" class="object-browser-table flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <div ref="objectListHeaderRef" class="h-7 shrink-0 overflow-hidden">
             <div class="grid h-7 items-center gap-3 border-b bg-muted/40 px-3 text-xs font-medium text-muted-foreground" :style="{ gridTemplateColumns, minWidth: `${objectGridMinWidth}px` }">
               <div v-if="showCheckboxColumn" class="relative flex min-w-0 items-center">
