@@ -11471,6 +11471,7 @@ mod tests {
             is_computed,
             is_hidden,
             generated_always_type: i32::from(is_hidden),
+            computed_clause: None,
         }
     }
 
