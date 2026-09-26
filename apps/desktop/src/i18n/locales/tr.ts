@@ -1017,6 +1017,8 @@ export default withEnglishFallback({
     mqttRefresh: "Yenile",
     mqttPublishDialogTitle: "MQTT Mesajı Yayınla",
     mqttClearMessages: "Mesajları temizle",
+    mqttCollapsePayload: "Yükü daralt",
+    mqttExpandPayload: "Yükü genişlet",
     mqttPauseMessages: "Duraklat",
     mqttResumeMessages: "Sürdür",
     mqttHidePublishPanel: "Yayınlama panelini gizle",

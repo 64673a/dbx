@@ -1511,6 +1511,8 @@ export default withEnglishFallback({
     mqttRefresh: "更新",
     mqttPublishDialogTitle: "MQTT メッセージを公開",
     mqttClearMessages: "メッセージを消去",
+    mqttCollapsePayload: "ペイロードを折りたたむ",
+    mqttExpandPayload: "ペイロードを展開",
     mqttPauseMessages: "一時停止",
     mqttResumeMessages: "再開",
     mqttHidePublishPanel: "公開パネルを隠す",

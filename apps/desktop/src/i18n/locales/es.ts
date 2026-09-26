@@ -1577,6 +1577,8 @@ export default withEnglishFallback({
     mqttRefresh: "Actualizar",
     mqttPublishDialogTitle: "Publicar mensaje MQTT",
     mqttClearMessages: "Borrar mensajes",
+    mqttCollapsePayload: "Contraer Payload",
+    mqttExpandPayload: "Expandir Payload",
     mqttPauseMessages: "Pausar",
     mqttResumeMessages: "Reanudar",
     mqttHidePublishPanel: "Ocultar panel de publicación",

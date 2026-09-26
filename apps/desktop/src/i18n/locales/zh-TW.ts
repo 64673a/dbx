@@ -1522,6 +1522,8 @@ export default withEnglishFallback({
     mqttRefresh: "重新整理",
     mqttPublishDialogTitle: "發布 MQTT 訊息",
     mqttClearMessages: "清除訊息",
+    mqttCollapsePayload: "收合訊息內容",
+    mqttExpandPayload: "展開訊息內容",
     mqttPauseMessages: "暫停",
     mqttResumeMessages: "繼續",
     mqttHidePublishPanel: "隱藏發布區",

@@ -1311,6 +1311,8 @@ export default {
     mqttRefresh: "Refresh",
     mqttPublishDialogTitle: "Publish MQTT Message",
     mqttClearMessages: "Clear messages",
+    mqttCollapsePayload: "Collapse payload",
+    mqttExpandPayload: "Expand payload",
     mqttPauseMessages: "Pause",
     mqttResumeMessages: "Resume",
     mqttHidePublishPanel: "Hide publish panel",

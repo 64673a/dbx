@@ -1197,6 +1197,8 @@ export default withEnglishFallback({
     mqttRefresh: "Обновить",
     mqttPublishDialogTitle: "Опубликовать сообщение MQTT",
     mqttClearMessages: "Очистить сообщения",
+    mqttCollapsePayload: "Свернуть полезную нагрузку",
+    mqttExpandPayload: "Развернуть полезную нагрузку",
     mqttPauseMessages: "Пауза",
     mqttResumeMessages: "Продолжить",
     mqttHidePublishPanel: "Скрыть панель публикации",
