@@ -6434,6 +6434,15 @@ export default {
     transactionEnded: "The transaction has ended or was rolled back. No rollback success was recorded.",
     rollbackBeforeClose: "Discard the uncommitted rollback changes and close history?",
     title: "History",
+    sources: { all: "All", sql: "SQL Queries", mcp: "MCP Calls" },
+    refresh: "Refresh",
+    mcp: {
+      legacyResponse: "This older record contains only a summary. The original response cannot be recovered. Calls made with the updated MCP service will record response content.",
+      request: "Request parameters",
+      response: "Response content",
+      toolSearch: "Filter by MCP tool name...",
+      allTools: "All tools",
+    },
     search: "Search history...",
     conversationSearch: "Search conversations...",
     empty: "No history yet",
@@ -6458,6 +6467,7 @@ export default {
     rollbackFailed: "Rollback failed: {message}",
     confirmDelete: "Delete this history entry?",
     confirmClear: "Clear all history?",
+    confirmClearSource: "Clear all {source} history?",
     emptyFiltered: "No history matches the current filters",
     loadMore: "Load more",
     scope: {
@@ -6479,6 +6489,7 @@ export default {
       data_change: "Data changes",
       schema_change: "Schema changes",
       failed: "Failed",
+      mcp_success: "Succeeded",
     },
     dateRange: {
       title: "Time range",
@@ -6498,6 +6509,7 @@ export default {
       import: "Import",
       transfer: "Transfer",
       redis_command: "Redis Command",
+      mcp: "MCP call",
     },
     kindShort: {
       query: "SQL",
@@ -6508,6 +6520,7 @@ export default {
       redis_command: "Redis",
     },
     detail: {
+      mcpTool: "MCP tool",
       kind: "Type",
       operation: "Operation",
       connection: "Connection",
@@ -7649,6 +7662,11 @@ export default {
   },
   settings: {
     historyRetentionLimit: "Query history retention",
+    mcpHistoryRetentionLimit: "MCP history retention",
+    mcpHistoryRetentionDescription: "Controls MCP call history independently from SQL history.",
+    mcpHistoryCleanup: "Clean up MCP history now",
+    mcpHistoryCleanupCompleted: "Removed {count} MCP history records.",
+    mcpHistoryCleanupFailed: "Could not clean up MCP history: {error}",
     historyRetentionDescription: "Lowering the limit removes older records the next time query history is recorded. Increasing the limit or choosing Unlimited does not restore deleted records. The limit applies to all connections and execution sources.",
     historyRetentionUnlimited: "Unlimited",
     historyRetentionLoadFailed: "Could not load history retention: {error}",
